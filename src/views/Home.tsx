@@ -1,17 +1,28 @@
-import {FlatList, Text, View} from 'react-native';
+import {FlatList, View} from 'react-native';
 import {useMedia} from '../hooks/apiHooks';
 import MediaListItem from '../components/MediaListItem';
+import {NavigationProp, ParamListBase} from '@react-navigation/native';
+import {useUpdateContext} from '../hooks/ContextHooks';
 
-const Home = () => {
-  const {mediaArray} = useMedia();
+const Home = ({navigation}: {navigation: NavigationProp<ParamListBase>}) => {
+  const {mediaArray, loading, loadMore} = useMedia();
+  const {triggerUpdate} = useUpdateContext();
   console.log(mediaArray);
+
   return (
     <View>
-      <Text>Home</Text>
       <FlatList
         data={mediaArray}
-        renderItem={({item}) => <MediaListItem item={item}></MediaListItem>}
-      ></FlatList>
+        renderItem={({item}) => (
+          <MediaListItem item={item} navigation={navigation} />
+        )}
+        onRefresh={() => {
+          triggerUpdate();
+        }}
+        refreshing={loading && mediaArray.length === 0}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+      />
     </View>
   );
 };

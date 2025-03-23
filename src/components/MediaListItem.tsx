@@ -1,32 +1,32 @@
-import {
-  Image,
-  StyleSheet,
-  Text,
-  Touchable,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import {NavigationProp, ParamListBase} from '@react-navigation/native';
 import {MediaItemWithOwner} from 'hybrid-types/DBTypes';
+import {Image, StyleSheet, Text, TouchableOpacity} from 'react-native';
 
-const MediaListItem = (props: {item: MediaItemWithOwner}) => {
-  const {item} = props;
+type MediaItemProps = {
+  item: MediaItemWithOwner;
+  navigation: NavigationProp<ParamListBase>;
+};
 
+const MediaListItem = ({item, navigation}: MediaItemProps) => {
   return (
-    <TouchableOpacity style={styles.container}>
-      <Text style={styles.item}>MediaListItem</Text>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={() => {
+        console.log(item.title + ' clicked');
+        navigation.navigate('Single', {item: item});
+      }}
+    >
       <Image
+        style={styles.image}
         source={{
           uri:
             item.thumbnail ||
             (item.screenshots && item.screenshots[2]) ||
             undefined,
         }}
-        style={styles.image}
       />
       <Text>{item.title}</Text>
-      <Text>{item.description}</Text>
-      <Text>{item.username}</Text>
-      <Text></Text>
+      <Text>Uploaded: {new Date(item.created_at).toLocaleString('fi-FI')}</Text>
     </TouchableOpacity>
   );
 };
@@ -34,18 +34,10 @@ const MediaListItem = (props: {item: MediaItemWithOwner}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
     backgroundColor: 'gray',
+    marginBottom: 10,
   },
-  item: {
-    padding: 10,
-  },
-  image: {
-    height: 500,
-  },
-  text: {
-    fontSize: 20,
-  },
+  image: {height: 300},
 });
 
 export default MediaListItem;

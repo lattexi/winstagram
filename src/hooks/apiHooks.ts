@@ -15,50 +15,74 @@ import {
   UploadResponse,
   UserResponse,
 } from 'hybrid-types/MessageTypes';
+import * as FileSystem from 'expo-file-system';
+import {useUpdateContext} from './ContextHooks';
 
-const useMedia = () => {
-  console.log('useMedia hook');
+const useMedia = (userId?: number, initialLimit = 5) => {
   const [mediaArray, setMediaArray] = useState<MediaItemWithOwner[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const {update} = useUpdateContext();
+
+  const fetchMedia = async (pageNumber = 1) => {
+    if (loading || !hasMore) return;
+
+    try {
+      setLoading(true);
+      const apiUrl = `${process.env.EXPO_PUBLIC_MEDIA_API}/media?page=${pageNumber}&limit=${initialLimit}`;
+
+      const media: MediaItem[] = (await fetchData<MediaItem[]>(apiUrl)) || [];
+      const mediaWithOwner: MediaItemWithOwner[] = await Promise.all(
+        media.map(async (item) => {
+          const owner = await fetchData<UserWithNoPassword>(
+            `${process.env.EXPO_PUBLIC_AUTH_API}/users/${item.user_id}`,
+          );
+          const mediaItem: MediaItemWithOwner = {
+            ...item,
+            username: owner.username,
+          };
+          if (
+            mediaItem.screenshots &&
+            typeof mediaItem.screenshots === 'string'
+          ) {
+            mediaItem.screenshots = JSON.parse(mediaItem.screenshots).map(
+              (screenshot: string) =>
+                process.env.EXPO_PUBLIC_FILE_URL + screenshot,
+            );
+          }
+          return mediaItem;
+        }),
+      );
+
+      if (pageNumber === 1) {
+        setMediaArray(mediaWithOwner);
+      } else {
+        setMediaArray((prev) => [...prev, ...mediaWithOwner]);
+      }
+
+      setHasMore(mediaWithOwner.length === initialLimit);
+    } catch (e) {
+      console.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const getMedia = async () => {
-      try {
-        console.log('fetching media');
-        const media = await fetchData<MediaItem[]>(
-          process.env.EXPO_PUBLIC_MEDIA_API + '/media',
-        );
-        const mediaWithOwner: MediaItemWithOwner[] = await Promise.all(
-          media.map(async (item) => {
-            console.log('fetching owner');
-            const owner = await fetchData<UserWithNoPassword>(
-              process.env.EXPO_PUBLIC_AUTH_API + '/users/' + item.user_id,
-            );
+    setPage(1);
+    setHasMore(true);
+    fetchMedia(1);
+    console.log('fetching media');
+  }, [userId, update]);
 
-            const mediaItem: MediaItemWithOwner = {
-              ...item,
-              username: owner.username,
-            };
-
-            if (
-              mediaItem.screenshots &&
-              typeof mediaItem.screenshots === 'string'
-            ) {
-              mediaItem.screenshots = JSON.parse(mediaItem.screenshots).map(
-                (screenshot: string) => {
-                  return process.env.EXPO_PUBLIC_FILE_URL + screenshot;
-                },
-              );
-            }
-            return mediaItem;
-          }),
-        );
-        setMediaArray(mediaWithOwner);
-      } catch (e) {
-        console.error((e as Error).message);
-      }
-    };
-    getMedia();
-  }, []);
+  const loadMore = () => {
+    if (!loading && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchMedia(nextPage);
+    }
+  };
 
   const postMedia = async (
     file: UploadResponse,
@@ -112,7 +136,13 @@ const useMedia = () => {
     }
   };
 
-  return {mediaArray, postMedia, deleteMedia};
+  return {
+    mediaArray,
+    postMedia,
+    loading,
+    loadMore,
+    deleteMedia,
+  };
 };
 
 const useFile = () => {
@@ -136,11 +166,33 @@ const useFile = () => {
     }
   };
 
-  return {postFile};
+  const postExpoFile = async (
+    imageUri: string,
+    token: string,
+  ): Promise<UploadResponse> => {
+    // TODO: display loading indicator
+    const fileResult = await FileSystem.uploadAsync(
+      process.env.EXPO_PUBLIC_UPLOAD_API + '/upload',
+      imageUri,
+      {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        headers: {
+          Authorization: 'Bearer ' + token,
+        },
+      },
+    );
+    // TODO: hide loading indicator
+    return fileResult.body && JSON.parse(fileResult.body);
+  };
+
+  return {postFile, postExpoFile};
 };
 
 const useAuthentication = () => {
   const postLogin = async (credentials: Credentials) => {
+    console.log('post', credentials);
     const options = {
       method: 'POST',
       headers: {
